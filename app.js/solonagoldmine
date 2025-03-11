@@ -1,0 +1,158 @@
+import React, { useState } from 'react';
+import { View, Text, TextInput, Button, Linking } from 'react-native';
+import { WebView } from 'react-native-webview';
+import { Connection, PublicKey, Transaction, SystemProgram } from '@solana/web3.js';
+import SQLite from 'react-native-sqlite-storage';
+
+// Solana Config
+const connection = new Connection('https://api.mainnet-beta.solana.com');
+const treasuryPubkey = new PublicKey('uPEXiDjWXzRN5P26Y9bGBNSy6HeL5UBqC6kdE9e2pRS');
+
+// SQLite (Secret Data)
+const db = SQLite.openDatabase(
+  { name: 'goldmine.db', location: 'default' },
+  () => console.log('DB Ready'),
+  error => console.log('DB Error', error)
+);
+db.transaction(tx => {
+  tx.executeSql(
+    'CREATE TABLE IF NOT EXISTS predictions (id INTEGER PRIMARY KEY AUTOINCREMENT, user TEXT, prediction REAL, timestamp INTEGER, target REAL, diff REAL)'
+  );
+});
+
+const App = () => {
+  const [walletConnected, setWalletConnected] = useState(false);
+  const [prediction, setPrediction] = useState('');
+  const [results, setResults] = useState('');
+  const [user, setUser] = useState('Anonymous');
+
+  const connectWallet = async () => {
+    const { solana } = globalThis;
+    if (solana && solana.isPhantom) {
+      await solana.connect();
+      setWalletConnected(true);
+      setUser(solana.publicKey.toString().slice(0, 8));
+    } else {
+      alert('Install Phantom Wallet!');
+    }
+  };
+
+  const paySubscription = async () => {
+    if (!walletConnected) return alert('Connect wallet!');
+    const { solana } = globalThis;
+    const tx = new Transaction().add(
+      SystemProgram.transfer({
+        fromPubkey: solana.publicKey,
+        toPubkey: treasuryPubkey,
+        lamports: 5_000_000 // ~$5 SOL
+      })
+    );
+    const { signature } = await solana.signAndSendTransaction(tx);
+    console.log('Tx:', signature);
+    alert('Subscribed! $5 SOL to treasury.');
+  };
+
+  const submitPrediction = async () => {
+    if (!walletConnected) return alert('Connect wallet!');
+    const pred = parseFloat(prediction);
+    if (isNaN(pred)) return alert('Enter a valid number!');
+    const { solana } = globalThis;
+    const tx = new Transaction().add(
+      SystemProgram.transfer({
+        fromPubkey: solana.publicKey,
+        toPubkey: treasuryPubkey,
+        lamports: 35_000 // $0.05 SOL optional
+      })
+    );
+    const { signature } = await solana.signAndSendTransaction(tx);
+    console.log('Pred Tx:', signature);
+
+    // Secret Logging
+    db.transaction(tx => {
+      tx.executeSql(
+        'INSERT INTO predictions (user, prediction, timestamp) VALUES (?, ?, ?)',
+        [user, pred, Math.floor(Date.now() / 1000)],
+        () => console.log('Logged'),
+        (_, error) => console.log('Log error', error)
+      );
+    });
+    alert(`Prediction ${pred} submitted!`);
+    setPrediction('');
+  };
+
+  const fetchResults = () => {
+    const mockTarget = 2.992e26; // Replace with real calc
+    setResults(`Target: ${mockTarget}. See BitChute for winners!`);
+    db.transaction(tx => {
+      tx.executeSql(
+        'UPDATE predictions SET target = ?, diff = ABS(prediction - ?) WHERE target IS NULL',
+        [mockTarget, mockTarget]
+      );
+    });
+  };
+
+  const openGrokAPI = () => {
+    Linking.openURL('https://x.ai/api');
+  };
+
+  const createAndMintToken = async () => {
+    try {
+      const { exec } = require('child_process');
+      exec('spl-token create-token', (error, stdout, stderr) => {
+        if (error) {
+          console.error(`Error creating token: ${error.message}`);
+          return;
+        }
+        const tokenId = stdout.trim();
+        exec(`spl-token mint ${tokenId} 1000000`, (error, stdout, stderr) => {
+          if (error) {
+            console.error(`Error minting token: ${error.message}`);
+            return;
+          }
+          console.log(`Minted 1,000,000 tokens to ${tokenId}`);
+        });
+      });
+    } catch (error) {
+      console.error(`Error: ${error.message}`);
+    }
+  };
+
+  return (
+    <View style={{ flex: 1, padding: 20 }}>
+      <Text style={{ fontSize: 24 }}>Solona Gold Mine (GMT)</Text>
+      {!walletConnected ? (
+        <Button title="Connect Wallet" onPress={connectWallet} />
+      ) : (
+        <>
+          <Text>Wallet: {user}</Text>
+          <Button title="Pay $5 SOL" onPress={paySubscription} />
+          <Text>Daily Equation (7 AM UTC):</Text>
+          <WebView
+            source={{ uri: 'https://www.bitchute.com/video/YOUR_VIDEO_ID/' }}
+            style={{ height: 200, marginVertical: 10 }}
+          />
+          <TextInput
+            placeholder="Your Prediction (e.g., 3e26)"
+            value={prediction}
+            onChangeText={setPrediction}
+            keyboardType="numeric"
+            style={{ borderWidth: 1, padding: 10, marginVertical: 10 }}
+          />
+          <Button title="Submit ($0.05 SOL)" onPress={submitPrediction} />
+          <Button title="Check Results" onPress={fetchResults} />
+          <Button title="Create and Mint Token" onPress={createAndMintToken} />
+          <Text>{results}</Text>
+          <Text style={{ marginTop: 10 }}>
+            Pro Tip: Build your AI with help from Grok’s API by xAI!  
+            Shout-out to Solonagoldmine for this epic app idea!
+          </Text>
+          <Button title="Get Grok API" onPress={openGrokAPI} />
+        </>
+      )}
+    </View>
+  );
+};
+
+export default App;
+
+

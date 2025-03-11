@@ -1,0 +1,10 @@
+{
+  "dependencies": {
+    "react": "18.2.0",
+    "react-native": "0.74.0",
+    "@solana/web3.js": "^1.95.0",
+    "@solana/spl-token": "^0.4.0",
+    "react-native-sqlite-storage": "^6.0.1",
+    "react-native-webview": "^13.8.0"
+  }
+}
